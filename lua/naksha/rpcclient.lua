@@ -5,7 +5,15 @@ function rpcclient.new()
 	local self = setmetatable({}, rpcclient)
 	local plugin_root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ":h:h:h")
 	self.bin_path = plugin_root .. "/bin/db_server"
-	self.config_path = plugin_root .. "/backend/configuration"
+
+	local data_dir = vim.fn.stdpath("data")
+	local naksha_dir = data_dir .. "/naksha"
+
+	if vim.fn.isdirectory(naksha_dir) == 0 then
+		vim.fn.mkdir(naksha_dir, "p")
+	end
+
+	self.config_path = naksha_dir
 
 	if vim.fn.executable(self.bin_path) ~= 1 then
 		vim.notify("Go binary not found at " .. self.bin_path, vim.log.levels.ERROR)

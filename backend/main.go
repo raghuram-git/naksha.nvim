@@ -81,7 +81,7 @@ func (s *NakshaServer) HandleRunQuery(params map[string]interface{}) (interface{
 
 func main() {
 	if len(os.Args) > 1 {
-		config.SetConfigFilename(os.Args[1] + "/dbconfig.json")
+		config.SetConfigFilename(os.Args[1] + "/connections.json")
 	}
 
 	server := NewNakshaServer()

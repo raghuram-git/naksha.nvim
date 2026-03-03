@@ -36,26 +36,46 @@ function layout.new(sessionmanager, connectionmanager)
 	windows = vim.api.nvim_tabpage_list_wins(0)
 	self.results_window = windows[#windows]
 
-	set_win_size(self.sidebar_window, 30, nil)
-	set_win_size(self.editor_window, nil, 15)
-	set_win_size(self.results_window, nil, 15)
+	self.sidebar_width = 30
+	self.editor_height = 15
+	self.results_height = 15
+	set_win_size(self.sidebar_window, self.sidebar_width, nil)
+	set_win_size(self.editor_window, nil, self.editor_height)
+	set_win_size(self.results_window, nil, self.results_height)
 
 	vim.api.nvim_set_option_value("number", false, { win = self.sidebar_window })
 	vim.api.nvim_set_option_value("number", false, { win = self.results_window })
 	vim.api.nvim_set_option_value("relativenumber", false, { win = self.sidebar_window })
 	vim.api.nvim_set_option_value("relativenumber", false, { win = self.results_window })
 
-	---Setting sidebar to windows
 	vim.api.nvim_win_set_buf(self.sidebar_window, self.sidebar_buf)
 
 	self.editor = editor.new(sessionmanager, connectionmanager, self.editor_window, self.results_window)
 	self.editor:add_buffer()
+
+	self.resize_autocmd = vim.api.nvim_create_autocmd("VimResized", {
+		callback = function()
+			if vim.api.nvim_win_is_valid(self.sidebar_window) then
+				set_win_size(self.sidebar_window, self.sidebar_width, nil)
+			end
+			if vim.api.nvim_win_is_valid(self.editor_window) then
+				set_win_size(self.editor_window, nil, self.editor_height)
+			end
+			if vim.api.nvim_win_is_valid(self.results_window) then
+				set_win_size(self.results_window, nil, self.results_height)
+			end
+		end,
+	})
 
 	return self
 end
 
 --TODO: Close Layout to kill the editor and result buffers
 function layout:close_layout()
+	if self.resize_autocmd then
+		vim.api.nvim_del_autocmd(self.resize_autocmd)
+	end
+
 	local naksha_tab = vim.api.nvim_get_current_tabpage()
 	local windows = vim.api.nvim_tabpage_list_wins(naksha_tab)
 

@@ -4,9 +4,18 @@ connectionmanager.__index = connectionmanager
 local json = vim.fn.json_decode
 local json_encode = vim.fn.json_encode
 
+local function get_default_config_path()
+	local data_dir = vim.fn.stdpath("data")
+	local naksha_dir = data_dir .. "/naksha"
+	if vim.fn.isdirectory(naksha_dir) == 0 then
+		vim.fn.mkdir(naksha_dir, "p")
+	end
+	return naksha_dir .. "/connections.json"
+end
+
 function connectionmanager.new()
 	local self = setmetatable({}, connectionmanager)
-	self.config_path = "/Users/raghuramgodavarti/workspace/naksha.nvim/backend/configuration/dbconfig.json"
+	self.config_path = get_default_config_path()
 	return self
 end
 

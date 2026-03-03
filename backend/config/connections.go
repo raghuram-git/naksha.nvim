@@ -39,10 +39,10 @@ func getConfigFilename() string {
 	}
 	execPath, err := os.Executable()
 	if err != nil {
-		return "configuration/dbconfig.json"
+		return "connections.json"
 	}
 	execDir := filepath.Dir(execPath)
-	return filepath.Join(execDir, "configuration", "dbconfig.json")
+	return filepath.Join(execDir, "connections.json")
 }
 
 
