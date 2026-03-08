@@ -2,6 +2,7 @@ package db
 
 import (
 	"backend/config"
+	"context"
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
@@ -58,6 +59,10 @@ func (p *PostgresDB) Connect(connectionConfigName string) error {
 
 func (p *PostgresDB) Query(query string) (*sql.Rows, error) {
 	return p.pgconn.Query(query)
+}
+
+func (p *PostgresDB) QueryContext(ctx context.Context, query string) (*sql.Rows, error) {
+	return p.pgconn.QueryContext(ctx, query)
 }
 
 func (p *PostgresDB) FormatResults(results *sql.Rows) ([]map[string]any, error) {

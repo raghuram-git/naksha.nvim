@@ -1,5 +1,6 @@
 local sessionlist = require("naksha.ui.sessionlist")
 local results = require("naksha.ui.results")
+local gutter = require("naksha.ui.gutter")
 
 local editor = {}
 editor.__index = editor
@@ -14,6 +15,10 @@ function editor.new(sessionmanager, connectionmanager, editor_win, results_win)
 	self.editor_win = editor_win
 	self.results_win = results_win
 	self.results = results.new(self.results_win, self.editor_win)
+	self.gutter = gutter.new()
+	self.current_query_callback_id = nil
+	self.current_query_buf = nil
+	self.current_query_line = nil
 
 	self:set_keymaps()
 	return self
@@ -203,12 +208,29 @@ function editor:run_query(sql)
 		return
 	end
 
-	self.sessionmanager:run_query(session_id, sql, function(result)
-		if result.status == "success" and result.results == "null" then
+	local current_buf = self.current_buf
+	local current_line = vim.fn.line(".")
+	self.gutter:start_spinner(current_buf, current_line)
+
+	self.current_query_buf = current_buf
+	self.current_query_line = current_line
+
+	self.current_query_callback_id = self.sessionmanager:run_query(session_id, sql, function(result)
+		self.current_query_callback_id = nil
+		self.current_query_buf = nil
+		self.current_query_line = nil
+		self.gutter:clear(current_buf, current_line)
+		if result.error then
+			self.gutter:show_status(current_buf, current_line, "error")
+			return
+		end
+		if result.results == "null" or result.results == nil then
+			self.gutter:show_status(current_buf, current_line, "success")
 			print("DML Query")
 			return
 		else
 			local decoded = vim.fn.json_decode(result.results)
+			self.gutter:show_status(current_buf, current_line, "success")
 			self.results:display_results(decoded, self, result.query)
 		end
 	end)
@@ -236,7 +258,21 @@ function editor:set_keymaps()
 		else
 			self:run_query(self:get_current_line())
 		end
-	end, { silent = true })
+	end, { silent = true, desc = "Run SQL query" })
+
+	vim.keymap.set("n", "<leader>hc", function()
+		if self.current_query_callback_id then
+			if self.current_query_buf and self.current_query_line then
+				self.gutter:clear(self.current_query_buf, self.current_query_line)
+			end
+			self.sessionmanager:cancel_query(self.current_query_callback_id)
+			self.current_query_callback_id = nil
+			self.current_query_buf = nil
+			self.current_query_line = nil
+		else
+			vim.notify("No running query to cancel", vim.log.levels.WARN)
+		end
+	end, { silent = true, desc = "Cancel running query" })
 
 	vim.keymap.set("n", "<leader>ho", function()
 		self:open_file_buffer()

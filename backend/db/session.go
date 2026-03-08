@@ -2,6 +2,7 @@ package db
 
 import (
 	"backend/config"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -10,14 +11,15 @@ import (
 )
 
 type SessionService struct {
-	dbConnections map[string]Database
-	mu            sync.Mutex
+	dbConnections  map[string]Database
+	runningQueries map[string]context.CancelFunc
+	mu             sync.Mutex
 }
 
-// Constructor for SessionService
 func NewSessionService() *SessionService {
 	return &SessionService{
-		dbConnections: make(map[string]Database),
+		dbConnections:  make(map[string]Database),
+		runningQueries: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -83,7 +85,7 @@ func (s *SessionService) CloseSession(sessionId string) error {
 	return nil
 }
 
-func (s *SessionService) RunQuery(sessionId string, query string) (string, error) {
+func (s *SessionService) RunQuery(sessionId string, query string, callbackId string) (string, error) {
 
 	dbConn, err := s.GetConnection(sessionId)
 	if err != nil {
@@ -94,8 +96,23 @@ func (s *SessionService) RunQuery(sessionId string, query string) (string, error
 		return "", fmt.Errorf("no active session found for id: %s", sessionId)
 	}
 
-	rows, err := dbConn.Query(query)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	s.mu.Lock()
+	s.runningQueries[callbackId] = cancel
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.runningQueries, callbackId)
+		s.mu.Unlock()
+	}()
+
+	rows, err := dbConn.QueryContext(ctx, query)
 	if err != nil {
+		if ctx.Err() == context.Canceled {
+			return "", fmt.Errorf("query cancelled")
+		}
 		return "", err
 	}
 
@@ -110,4 +127,17 @@ func (s *SessionService) RunQuery(sessionId string, query string) (string, error
 
 	return string(data), nil
 
+}
+
+func (s *SessionService) CancelQuery(callbackId string) error {
+	s.mu.Lock()
+	cancel, exists := s.runningQueries[callbackId]
+	s.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("no running query found with id: %s", callbackId)
+	}
+
+	cancel()
+	return nil
 }

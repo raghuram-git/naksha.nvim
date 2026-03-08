@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -56,27 +57,66 @@ func (s *NakshaServer) HandleListConnectionConfigs() (interface{}, error) {
 
 func (s *NakshaServer) HandleCreateSession(params map[string]interface{}) (interface{}, error) {
 	connectionConfigName, _ := params["connectionConfigName"].(string)
-	sessionId, err := s.sessionManager.CreateSession(connectionConfigName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %v", err)
-	}
-	return map[string]interface{}{"session_id": sessionId}, nil
+	callbackId, _ := params["callback_id"].(string)
+
+	go func() {
+		sessionId, err := s.sessionManager.CreateSession(connectionConfigName)
+		response := map[string]interface{}{}
+		if err != nil {
+			response["error"] = err.Error()
+		} else {
+			response["session_id"] = sessionId
+		}
+		callbackData := map[string]interface{}{
+			"callback_id": callbackId,
+			"result":      response,
+		}
+		jsonData, _ := json.Marshal(callbackData)
+		fmt.Fprintf(os.Stderr, "NAKSHA_CALLBACK:%s\n", jsonData)
+	}()
+
+	return nil, nil
 }
 
 func (s *NakshaServer) HandleRunQuery(params map[string]interface{}) (interface{}, error) {
 	sessionId, _ := params["session_id"].(string)
 	query, _ := params["query"].(string)
+	callbackId, _ := params["callback_id"].(string)
 
-	results, err := s.sessionManager.RunQuery(sessionId, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run query: %v", err)
+	go func() {
+		results, err := s.sessionManager.RunQuery(sessionId, query, callbackId)
+		response := map[string]interface{}{
+			"session_id": sessionId,
+			"query":      query,
+		}
+		if err != nil {
+			response["error"] = err.Error()
+		} else {
+			response["results"] = results
+		}
+		callbackData := map[string]interface{}{
+			"callback_id": callbackId,
+			"result":      response,
+		}
+		jsonData, _ := json.Marshal(callbackData)
+		fmt.Fprintf(os.Stderr, "NAKSHA_CALLBACK:%s\n", jsonData)
+	}()
+
+	return nil, nil
+}
+
+func (s *NakshaServer) HandleCancelQuery(params map[string]interface{}) (interface{}, error) {
+	callbackId, ok := params["callback_id"].(string)
+	if !ok || callbackId == "" {
+		return map[string]interface{}{"error": "invalid callback_id"}, nil
 	}
-	return map[string]interface{}{
-		"session_id": sessionId,
-		"query":      query,
-		"status":     "success",
-		"results":    results,
-	}, nil
+
+	err := s.sessionManager.CancelQuery(callbackId)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}, nil
+	}
+
+	return map[string]interface{}{"status": "cancelled"}, nil
 }
 
 func main() {
@@ -96,6 +136,7 @@ func main() {
 	endpoint.Register("list_connection_configs", server.HandleListConnectionConfigs)
 	endpoint.Register("create_session", server.HandleCreateSession)
 	endpoint.Register("run_query", server.HandleRunQuery)
+	endpoint.Register("cancel_query", server.HandleCancelQuery)
 
 	if err := endpoint.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

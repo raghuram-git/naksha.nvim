@@ -20,13 +20,20 @@ function rpcclient.new()
 		return
 	end
 
+	self.callbacks = {}
+
 	self.job_id = vim.fn.jobstart({
 		self.bin_path,
 		self.config_path,
 	}, {
 		rpc = true,
 		on_stderr = function(_, data)
-			vim.notify("Go stderr: " .. table.concat(data, ""), vim.log.levels.WARN)
+			local line = table.concat(data, "")
+			if line:match("^NAKSHA_CALLBACK:") then
+				self:handle_callback(line)
+			elseif line ~= "" then
+				vim.notify("Go stderr: " .. line, vim.log.levels.WARN)
+			end
 		end,
 		on_exit = function(j, code, signal)
 			self.job_id = nil
@@ -37,6 +44,37 @@ function rpcclient.new()
 	})
 
 	return self
+end
+
+function rpcclient:handle_callback(line)
+	local json_str = line:gsub("^NAKSHA_CALLBACK:", "")
+	local ok, callback_data = pcall(vim.json.decode, json_str)
+	if not ok then
+		vim.notify("Failed to parse callback: " .. json_str, vim.log.levels.ERROR)
+		return
+	end
+
+	local callback_id = callback_data.callback_id
+	local result = callback_data.result
+
+	local callback_fn = self.callbacks[callback_id]
+	if callback_fn then
+		vim.schedule_wrap(callback_fn)(result)
+		self.callbacks[callback_id] = nil
+	end
+end
+
+function rpcclient:register_callback(callback_id, callback_fn)
+	self.callbacks[callback_id] = callback_fn
+end
+
+function rpcclient:cancel_callback(callback_id)
+	if self.job_id and self.job_id > 0 then
+		local req = {
+			callback_id = callback_id,
+		}
+		vim.rpcnotify(self.job_id, "cancel_query", req)
+	end
 end
 
 function rpcclient:stop_backend_server()
