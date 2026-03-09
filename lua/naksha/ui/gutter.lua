@@ -40,6 +40,8 @@ function gutter.new()
 		texthl = "DiagnosticError",
 	})
 
+	obj.ns_id = vim.api.nvim_create_namespace("naksha_gutter")
+
 	return obj
 end
 
@@ -131,6 +133,26 @@ function gutter:clear(bufnr, line)
 
 	vim.fn.sign_unplace("query_runner", {
 		buffer = bufnr,
+		id = line,
+	})
+
+	self:clear_extmarks(bufnr, line)
+end
+
+function gutter:clear_extmarks(bufnr, line)
+	local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, self.ns_id, { 0, 0 }, { -1, -1 }, {})
+	for _, extmark in ipairs(extmarks) do
+		vim.api.nvim_buf_del_extmark(bufnr, self.ns_id, extmark[1])
+	end
+end
+
+function gutter:show_error_extmark(bufnr, line, error_msg)
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+
+	self:clear_extmarks(bufnr, line)
+
+	vim.api.nvim_buf_set_extmark(bufnr, self.ns_id, line - 1, 0, {
+		virt_lines = { { { "⬤ " .. error_msg, "DiagnosticError" } } },
 		id = line,
 	})
 end

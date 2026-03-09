@@ -210,6 +210,7 @@ function editor:run_query(sql)
 
 	local current_buf = self.current_buf
 	local current_line = vim.fn.line(".")
+	self.gutter:clear(current_buf, current_line)
 	self.gutter:start_spinner(current_buf, current_line)
 
 	self.current_query_buf = current_buf
@@ -222,6 +223,7 @@ function editor:run_query(sql)
 		self.gutter:clear(current_buf, current_line)
 		if result.error then
 			self.gutter:show_status(current_buf, current_line, "error")
+			self.gutter:show_error_extmark(current_buf, current_line, result.error)
 			return
 		end
 		if result.results == "null" or result.results == nil then
